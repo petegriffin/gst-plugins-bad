@@ -66,7 +66,7 @@ struct _GstWaylandSink
   GstVideoInfo src_info;
 
   /* preferred window resolution */
-  gint preferred_width, preferred_height;
+  gint preferred_width, preferred_height, preferred_x, preferred_y;
 
   gchar *display_name;
 
