@@ -893,6 +893,9 @@ gst_wayland_sink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
           &sink->video_info, &sink->render_lock);
     }
     gst_wl_window_set_alpha (sink->window, sink->alpha);
+  } else {
+    GST_DEBUG ("Window provided %p", sink->window);
+    gst_wl_window_set_alpha (sink->window, sink->alpha);
   }
 
   while (sink->redraw_pending)
