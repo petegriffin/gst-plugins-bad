@@ -76,7 +76,8 @@ enum
   PROP_WINDOW_HEIGHT,
   PROP_DISPLAY,
   PROP_ALPHA,
-  PROP_ENABLE_TILE
+  PROP_ENABLE_TILE,
+  PROP_LAST
 };
 
 GST_DEBUG_CATEGORY (gstwayland_debug);
@@ -228,7 +229,7 @@ gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
       g_param_spec_string ("display", "Wayland Display name", "Wayland "
           "display name to connect to, if not supplied via the GstContext",
           NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  
+
   g_object_class_install_property (gobject_class, PROP_ALPHA,
       g_param_spec_float ("alpha", "Wayland surface alpha", "Wayland "
           "surface alpha value, apply custom alpha value to wayland surface",
@@ -238,6 +239,8 @@ gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
       g_param_spec_boolean ("enable-tile", "enable hantro tile",
       "When enabled, the sink propose VSI tile modifier to VPU", FALSE,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT));
+
+  gst_video_overlay_install_properties (gobject_class, PROP_LAST);
 }
 
 static void
@@ -246,6 +249,8 @@ gst_wayland_sink_init (GstWaylandSink * sink)
   sink->alpha = 0.0f;
   sink->preferred_width = -1;
   sink->preferred_height = -1;
+  sink->preferred_x = -1;
+  sink->preferred_y = -1;
   g_mutex_init (&sink->display_lock);
   g_mutex_init (&sink->render_lock);
   g_cond_init (&sink->redraw_wait);
@@ -309,7 +314,8 @@ gst_wayland_sink_set_property (GObject * object,
       sink->enable_tile = g_value_get_boolean (value);
       break;
     default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      if (!gst_video_overlay_set_property (object, PROP_LAST, prop_id, value))
+	G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
 }
@@ -471,6 +477,7 @@ gst_wayland_sink_change_state (GstElement * element, GstStateChange transition)
         sink->redraw_pending = FALSE;
         g_mutex_unlock (&sink->render_lock);
       }
+
       g_mutex_unlock (&sink->display_lock);
       g_clear_object (&sink->pool);
       
@@ -870,6 +877,13 @@ gst_wayland_sink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
     g_mutex_lock (&sink->render_lock);
 
     if (!sink->window) {
+      GST_DEBUG ("No window provided - creating one ourselves");
+
+      /* this allows the window to be created using preferred_width/height
+      *  which could have been set via a property */
+      sink->display->preferred_width = sink->preferred_width;
+      sink->display->preferred_height = sink->preferred_height;
+
       /* if we were not provided a window, create one ourselves */
       sink->window = gst_wl_window_new_toplevel (sink->display,
           &sink->video_info, &sink->render_lock);
@@ -1165,7 +1179,13 @@ gst_wayland_sink_set_render_rectangle (GstVideoOverlay * overlay,
   if (!sink->window) {
     g_mutex_unlock (&sink->render_lock);
     GST_WARNING_OBJECT (sink,
-        "set_render_rectangle called without window, ignoring");
+        "set_render_rectangle called without window, caching width & height");
+
+    /* if no window exists x,y is meaningless */
+    sink->preferred_width = w;
+    sink->preferred_height = h;
+    GST_DEBUG_OBJECT (sink, "window geometry %d x %d cached",w, h);
+
     return;
   }
 
