@@ -478,6 +478,10 @@ gst_wayland_sink_change_state (GstElement * element, GstStateChange transition)
         g_mutex_unlock (&sink->render_lock);
       }
 
+      /* ensure window/surface is destroyed */
+      if (sink->window)
+	g_object_unref (sink->window);
+
       g_mutex_unlock (&sink->display_lock);
       g_clear_object (&sink->pool);
       
